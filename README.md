@@ -1,4 +1,4 @@
-# wWorkerHub
+# WorkerHub
 
 ISAC RUSSELL PAULBERT 297454
 
