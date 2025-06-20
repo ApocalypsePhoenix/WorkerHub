@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -8,7 +9,9 @@ import 'package:workerhub/myconfig.dart';
 
 class ProfilePage extends StatefulWidget {
   final User user;
-  const ProfilePage({super.key, required this.user});
+  final Function(User)? onProfileUpdated;
+
+  const ProfilePage({super.key, required this.user, this.onProfileUpdated});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -73,9 +76,12 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _updateProfile() async {
     String base64Image = "";
+    String filename = "";
+
     if (_image != null) {
       final bytes = await _image!.readAsBytes();
       base64Image = base64Encode(bytes);
+      filename = "${widget.user.userId}.png";
     }
 
     setState(() => _loading = true);
@@ -90,6 +96,7 @@ class _ProfilePageState extends State<ProfilePage> {
           "phone": phoneController.text.trim(),
           "address": addressController.text.trim(),
           "image": base64Image,
+          "filename": filename,
         },
       ).timeout(const Duration(seconds: 10));
 
@@ -99,6 +106,9 @@ class _ProfilePageState extends State<ProfilePage> {
           const SnackBar(content: Text("Profile updated successfully")),
         );
         setState(() => _isEditing = false);
+        if (widget.onProfileUpdated != null) {
+          widget.onProfileUpdated!(widget.user);
+        }
       } else {
         _showError(data['message'] ?? "Update failed");
       }
@@ -109,24 +119,72 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  void _selectImage() async {
-    final x = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (x != null) {
-      setState(() => _image = File(x.path));
+  void _showImagePickerDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Select Image From"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton.icon(
+              icon: const Icon(Icons.camera_alt),
+              label: const Text("Camera"),
+              onPressed: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.image),
+              label: const Text("Gallery"),
+              onPressed: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    final picked = await ImagePicker().pickImage(source: source, maxWidth: 800, maxHeight: 800);
+    if (picked != null) {
+      setState(() => _image = File(picked.path));
     }
   }
 
   Widget _profileImageWidget() {
-    if (_image != null) {
-      return CircleAvatar(radius: 60, backgroundImage: FileImage(_image!));
-    } else if ((widget.user.userImage ?? "").isNotEmpty) {
-      return CircleAvatar(
-        radius: 60,
-        backgroundImage: NetworkImage("${MyConfig.myurl}/${widget.user.userImage}"),
-      );
-    } else {
-      return const CircleAvatar(radius: 60, backgroundImage: AssetImage("assets/images/profile.png"));
-    }
+    final imageWidget = CircleAvatar(
+      radius: 60,
+      backgroundImage: _image != null
+          ? FileImage(_image!)
+          : (widget.user.userImage?.isNotEmpty ?? false)
+              ? NetworkImage("${MyConfig.myurl}/${widget.user.userImage}")
+              : const AssetImage("assets/images/profile.png") as ImageProvider,
+    );
+
+    return Stack(
+      alignment: Alignment.bottomRight,
+      children: [
+        imageWidget,
+        if (_isEditing)
+          GestureDetector(
+            onTap: _showImagePickerDialog,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              padding: const EdgeInsets.all(6),
+              child: const Icon(Icons.add, size: 20, color: Colors.white),
+            ),
+          ),
+      ],
+    );
   }
 
   Widget _buildField(String label, TextEditingController c, {int max = 1}) {
@@ -154,8 +212,13 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Profile"),
+        title: const Text("Profile",
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         backgroundColor: Colors.green.shade800,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
           if (!_loading)
             IconButton(
@@ -170,10 +233,7 @@ class _ProfilePageState extends State<ProfilePage> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  GestureDetector(
-                    onTap: _isEditing ? _selectImage : null,
-                    child: _profileImageWidget(),
-                  ),
+                  _profileImageWidget(),
                   const SizedBox(height: 20),
                   _buildField("Full Name", nameController),
                   _buildField("Email", emailController),

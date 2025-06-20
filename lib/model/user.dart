@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 class User {
   String? userId;
   String? userName;
@@ -24,7 +26,7 @@ class User {
     userPassword = json['password'];
     userPhone = json['phone'];
     userAddress = json['address'];
-    userImage = json['image'];
+    userImage = json['image'] ?? ""; // fallback to empty string
   }
 
   Map<String, dynamic> toJson() {
@@ -37,5 +39,14 @@ class User {
     data['address'] = userAddress;
     data['image'] = userImage;
     return data;
+  }
+
+  /// Helper method to get the ImageProvider
+  ImageProvider getProfileImage(String baseUrl) {
+    if ((userImage?.isNotEmpty ?? false)) {
+      return NetworkImage("$baseUrl/$userImage");
+    } else {
+      return const AssetImage("assets/images/profile.png");
+    }
   }
 }

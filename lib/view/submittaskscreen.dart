@@ -34,20 +34,14 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
 
     setState(() => _isSubmitting = true);
 
-    String? imageName;
-    if (_image != null) {
-      String base64Image = base64Encode(kIsWeb
-          ? webImage!
-          : await _image!.readAsBytes());
-      imageName = "${widget.user.userId}_${widget.work.workId}.png";
+    String base64Image = "";
+    String imageName = "";
 
-      await http.post(
-        Uri.parse("${MyConfig.myurl}/workerhub/php/upload_submission_image.php"),
-        body: {
-          "image": base64Image,
-          "filename": imageName,
-        },
+    if (_image != null || webImage != null) {
+      base64Image = base64Encode(
+        kIsWeb ? webImage! : await _image!.readAsBytes(),
       );
+      imageName = "${widget.user.userId}_${widget.work.workId}.png";
     }
 
     final response = await http.post(
@@ -56,7 +50,8 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
         'work_id': widget.work.workId,
         'worker_id': widget.user.userId,
         'submission_text': _submissionController.text.trim(),
-        'image': imageName ?? "",
+        'image': base64Image,
+        'filename': imageName,
       },
     );
 
@@ -75,21 +70,67 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
     setState(() => _isSubmitting = false);
   }
 
-  void _selectImage() async {
+  void showSelectionDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Select Image From"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _selectFromCamera();
+              },
+              child: const Text("From Camera"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _selectFromGallery();
+              },
+              child: const Text("From Gallery"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectFromCamera() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
       source: kIsWeb ? ImageSource.gallery : ImageSource.camera,
-      maxWidth: 800,
       maxHeight: 800,
+      maxWidth: 800,
     );
-
     if (pickedFile != null) {
       _image = File(pickedFile.path);
-      if (kIsWeb) {
-        webImage = await pickedFile.readAsBytes();
-      }
+      if (kIsWeb) webImage = await pickedFile.readAsBytes();
       setState(() {});
     }
+  }
+
+  Future<void> _selectFromGallery() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxHeight: 800,
+      maxWidth: 800,
+    );
+    if (pickedFile != null) {
+      _image = File(pickedFile.path);
+      if (kIsWeb) webImage = await pickedFile.readAsBytes();
+      setState(() {});
+    }
+  }
+
+  ImageProvider _buildSubmissionImage() {
+    if (_image != null) {
+      return kIsWeb ? MemoryImage(webImage!) : FileImage(_image!);
+    }
+    return const AssetImage("assets/images/camera.png");
   }
 
   @override
@@ -100,64 +141,79 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
       appBar: AppBar(
         title: const Text("Submit Task", style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.green.shade800,
+                leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(task.title ?? "No Title",
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            Text(task.description ?? "No Description"),
-            const SizedBox(height: 20),
-            const Text("Your Submission:"),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _submissionController,
-              maxLines: 4,
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.green.shade50,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hintText: "Enter submission details...",
-              ),
-            ),
-            const SizedBox(height: 16),
-            GestureDetector(
-              onTap: _selectImage,
-              child: Container(
-                height: 200,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.green),
-                  borderRadius: BorderRadius.circular(10),
-                  image: _image != null
-                      ? DecorationImage(
-                          image: kIsWeb ? MemoryImage(webImage!) : FileImage(_image!) as ImageProvider,
-                          fit: BoxFit.cover,
-                        )
-                      : const DecorationImage(
-                          image: AssetImage("assets/images/camera.png"),
-                          fit: BoxFit.contain,
-                        ),
+        child: Card(
+          elevation: 8,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(task.title ?? "No Title",
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text(task.description ?? "No Description"),
+                const SizedBox(height: 20),
+                const Text("Your Submission:",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _submissionController,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    hintText: "Enter your submission here...",
+                    filled: true,
+                    fillColor: Colors.green.shade50,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isSubmitting ? null : _submitWork,
-                icon: const Icon(Icons.upload, color: Colors.white),
-                label: const Text("Submit", style: TextStyle(color: Colors.white)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade800,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                const SizedBox(height: 20),
+                const Text("Attach Image (optional):",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: showSelectionDialog,
+                  child: Container(
+                    height: 200,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.green),
+                      borderRadius: BorderRadius.circular(12),
+                      image: DecorationImage(
+                        image: _buildSubmissionImage(),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            )
-          ],
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSubmitting ? null : _submitWork,
+                    icon: const Icon(Icons.upload, color: Colors.white),
+                    label: const Text("Submit", style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade800,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
