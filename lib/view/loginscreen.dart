@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workerhub/model/user.dart';
 import 'package:workerhub/myconfig.dart';
-import 'package:workerhub/view/mainscreen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workerhub/view/registerscreen.dart';
+import 'package:workerhub/view/mainscreen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -51,7 +51,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     _buildTextField("Password", passwordController, TextInputType.visiblePassword, obscure: true),
                     const SizedBox(height: 10),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.start,
                       children: [
                         Checkbox(
                           value: isChecked,
@@ -60,18 +59,20 @@ class _LoginScreenState extends State<LoginScreen> {
                             setState(() {
                               isChecked = value!;
                             });
-                            String email = emailController.text;
-                            String password = passwordController.text;
-                            if (isChecked && (email.isEmpty || password.isEmpty)) {
+                            if (isChecked &&
+                                (emailController.text.isEmpty || passwordController.text.isEmpty)) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Please fill all fields"), backgroundColor: Colors.red),
+                                const SnackBar(
+                                  content: Text("Please fill all fields"),
+                                  backgroundColor: Colors.red,
+                                ),
                               );
                               setState(() {
                                 isChecked = false;
                               });
-                              return;
+                            } else {
+                              storeCredentials(emailController.text, passwordController.text, isChecked);
                             }
-                            storeCredentials(email, password, isChecked);
                           },
                         ),
                         const Text("Remember Me"),
@@ -97,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 16),
             GestureDetector(
               onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterScreen()));
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen()));
               },
               child: const Text("Register an account?", style: TextStyle(color: Colors.green, fontSize: 16)),
             ),
@@ -107,7 +108,8 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, TextInputType inputType, {bool obscure = false}) {
+  Widget _buildTextField(String label, TextEditingController controller, TextInputType inputType,
+      {bool obscure = false}) {
     return TextField(
       controller: controller,
       keyboardType: inputType,
@@ -139,20 +141,16 @@ class _LoginScreenState extends State<LoginScreen> {
       "email": email,
       "password": password,
     }).then((response) {
-      print(response.body);
       if (response.statusCode == 200) {
         var jsondata = json.decode(response.body);
         if (jsondata['status'] == 'success') {
           var userdata = jsondata['data'];
           User user = User.fromJson(userdata[0]);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("Welcome ${user.userName}"),
-            backgroundColor: Colors.green,
-          ));
-          Navigator.of(context).pop();
-          Navigator.pushReplacement(
+
+          Navigator.pushAndRemoveUntil(
             context,
-            MaterialPageRoute(builder: (context) => MainScreen(user: user)),
+            MaterialPageRoute(builder: (_) => MainScreen(user: user)),
+            (Route<dynamic> route) => false,
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -170,21 +168,10 @@ class _LoginScreenState extends State<LoginScreen> {
       await prefs.setString('email', email);
       await prefs.setString('pass', password);
       await prefs.setBool('remember', isChecked);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Preferences Saved"),
-        backgroundColor: Colors.green,
-      ));
     } else {
       await prefs.remove('email');
       await prefs.remove('pass');
       await prefs.remove('remember');
-      emailController.clear();
-      passwordController.clear();
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Preferences Removed"),
-        backgroundColor: Colors.red,
-      ));
     }
   }
 
@@ -192,12 +179,12 @@ class _LoginScreenState extends State<LoginScreen> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? email = prefs.getString('email');
     String? password = prefs.getString('pass');
-    bool? isChecked = prefs.getBool('remember');
-    if (email != null && password != null && isChecked != null) {
+    bool? remember = prefs.getBool('remember');
+    if (email != null && password != null && remember == true) {
       emailController.text = email;
       passwordController.text = password;
       setState(() {
-        this.isChecked = isChecked;
+        isChecked = true;
       });
     }
   }
